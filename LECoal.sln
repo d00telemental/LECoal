@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.31005.135
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LECoal", "LECoal.csproj", "{F23FED39-F611-4E84-BD4B-CC4CEB4F8DFF}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{F23FED39-F611-4E84-BD4B-CC4CEB4F8DFF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F23FED39-F611-4E84-BD4B-CC4CEB4F8DFF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F23FED39-F611-4E84-BD4B-CC4CEB4F8DFF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F23FED39-F611-4E84-BD4B-CC4CEB4F8DFF}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {6FCB29A5-4A7B-456B-8EFE-8AE825C4A748}
+	EndGlobalSection
+EndGlobal
