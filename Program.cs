@@ -83,43 +83,8 @@ namespace LECoal
                 var key = reader.ReadCoalescedString();
                 var val = reader.ReadCoalescedString();
 
-                List<string> lines = splitValue(val);
-
-                if (lines is null)
-                {
-                    Pairs.Add((key, val));
-                    continue;
-                }
-                
-                foreach (var line in lines)
-                {
-                    Pairs.Add(($"{key}||", line));
-                }
+                Pairs.Add((key, val));
             }
-        }
-
-        internal List<string> splitValue(string val)
-        {
-            List<string> splitVal = null;
-
-            if (val.Contains("\r\n"))
-            {
-                splitVal = val.Split("\r\n").ToList();
-            }
-            else if (val.Contains('\r') && !val.Contains('\n'))
-            {
-                splitVal = val.Split('\r').ToList();
-            }
-            else if (!val.Contains('\r') && val.Contains('\n'))
-            {
-                splitVal = val.Split('\n').ToList();
-            }
-            else if (val.Contains('\r') && val.Contains('\n'))
-            {
-                throw new Exception("Value contains both CR and LF but not in a CRLF sequence!");
-            }
-
-            return splitVal;
         }
     }
 
@@ -223,11 +188,11 @@ namespace LECoal
                     var chunks = line.Split('=', 2);
                     if (chunks.Length != 2) { throw new Exception("Expected to have exactly two chunks after splitting the line by ="); }
 
-                    if (chunks[0].EndsWith("||"))  // It's a multiline UGH
+                    if (chunks[0].EndsWith("||"))  // It's a multiline value UGH
                     {
                         var strippedKey = chunks[0].Substring(0, chunks[0].Length - 2);
                         
-                        if (currentSection.Pairs.Count > 0 && currentSection.Pairs.Last().Item1 == strippedKey)
+                        if (currentSection.Pairs.Count > 0 && currentSection.Pairs.Last().Item1 == strippedKey)  // It's a second or further line in multiline value
                         {
                             var last = currentSection.Pairs[currentSection.Pairs.Count() - 1];
                             currentSection.Pairs[currentSection.Pairs.Count() - 1]
@@ -252,9 +217,7 @@ namespace LECoal
             return bundle;
         }
 
-        
-
-        public void UnpackToDirectory(string destinationPath)
+        public void WriteToDirectory(string destinationPath)
         {
             Directory.CreateDirectory(destinationPath);
 
@@ -267,7 +230,17 @@ namespace LECoal
                     writerStream.WriteLine($"[{section.Name}]");
                     foreach (var pair in section.Pairs)
                     {
-                        writerStream.WriteLine($"{pair.Item1}={pair.Item2}");
+                        var lines = splitValue(pair.Item2);
+                        if (lines is null || lines.Count() == 1)
+                        {
+                            writerStream.WriteLine($"{pair.Item1}={pair.Item2}");
+                            continue;
+                        }
+
+                        foreach (var line in lines)
+                        {
+                            writerStream.WriteLine($"{pair.Item1}||={line}");
+                        }
                     }
                 }
             }
@@ -283,7 +256,7 @@ namespace LECoal
             }
         }
 
-        public void PackToFile(string destinationPath)
+        public void WriteToFile(string destinationPath)
         {
             BinaryWriter writer = new(new MemoryStream());
 
@@ -308,6 +281,30 @@ namespace LECoal
 
             File.WriteAllBytes(destinationPath, (writer.BaseStream as MemoryStream).ToArray());
         }
+
+        internal List<string> splitValue(string val)
+        {
+            List<string> splitVal = null;
+
+            if (val.Contains("\r\n"))
+            {
+                splitVal = val.Split("\r\n").ToList();
+            }
+            else if (val.Contains('\r') && !val.Contains('\n'))
+            {
+                splitVal = val.Split('\r').ToList();
+            }
+            else if (!val.Contains('\r') && val.Contains('\n'))
+            {
+                splitVal = val.Split('\n').ToList();
+            }
+            else if (val.Contains('\r') && val.Contains('\n'))
+            {
+                throw new Exception("Value contains both CR and LF but not in a CRLF sequence!");
+            }
+
+            return splitVal;
+        }
     }
 
     class Program
@@ -317,15 +314,21 @@ namespace LECoal
 
         static void Main(string[] args)
         {
+            // .\MELECoal.exe unpack Coalesced_INT.bin .
+            // .\MELECoal.exe pack . Coalesced_INT.bin
+
             var inputPath = Path.Combine(_pathPrefix, _inputBundleName);
             var extractedDir = Path.ChangeExtension(Path.Combine(_pathPrefix, _inputBundleName), "").TrimEnd('.');
             var rebuiltPath = inputPath + ".rebuilt";
 
             var bundle = CoalescedBundle.ReadFromFile(_inputBundleName, inputPath);
-            bundle.UnpackToDirectory(extractedDir);
+            bundle.WriteToDirectory(extractedDir);
 
             var rebuiltBundle = CoalescedBundle.ReadFromDirectory(_inputBundleName, extractedDir);
-            rebuiltBundle.UnpackToDirectory(extractedDir + "_re");
+            rebuiltBundle.WriteToFile(rebuiltPath);
+
+            var twiceRebuiltBundle = CoalescedBundle.ReadFromFile(_inputBundleName, rebuiltPath);
+            twiceRebuiltBundle.WriteToDirectory(extractedDir + "_re");
         }
     }
 }
