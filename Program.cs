@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Text;
 
 namespace LECoal
@@ -53,7 +54,37 @@ namespace LECoal
             {
                 var key = reader.ReadCoalescedString();
                 var val = reader.ReadCoalescedString();
-                Pairs.Add((key, val));
+
+                List<string> splitVal = null;
+
+                if (val.Contains("\r\n"))
+                {
+                    splitVal = val.Split("\r\n").ToList();
+                }
+                else if (val.Contains('\r') && !val.Contains('\n'))
+                {
+                    splitVal = val.Split('\r').ToList();
+                }
+                else if (!val.Contains('\r') && val.Contains('\n'))
+                {
+                    splitVal = val.Split('\n').ToList();
+                }
+                else if (val.Contains('\r') && val.Contains('\n'))
+                {
+                    throw new Exception("Value contains both CR and LF but not in a CRLF sequence!");
+                }
+
+                if (splitVal is null)
+                {
+                    Pairs.Add((key, val));
+                }
+                else
+                {
+                    foreach (var line in splitVal)
+                    {
+                        Pairs.Add(($"{key}||", line));
+                    }
+                }
             }
         }
     }
@@ -78,7 +109,6 @@ namespace LECoal
         }
 
         public static string EscapeName(string name) => name.Replace("\\", "_").Replace("..", "-");
-        public static string UnescapeName(string name) => name.Replace("_", "\\").Replace("-", "..");
     }
 
     [DebuggerDisplay("CoalescedBundle \"{Name}\" with {Files.Count} files")]
@@ -132,14 +162,17 @@ namespace LECoal
                     {
                         throw new Exception("Expected a manifest line to have 2 chunks");
                     }
-                    relativePaths.Add((lineChunks[1], lineChunks[0]));
+                    relativePaths.Add((lineChunks[0], lineChunks[1]));
                 }
             }
 
             // Construct a bundle
             CoalescedBundle bundle = new(destinationName);
 
-
+            foreach (var relativePath in relativePaths)
+            {
+                
+            }
 
             return bundle;
         }
@@ -169,7 +202,7 @@ namespace LECoal
             manifestWriter.WriteLine($"{Files.Count}");
             foreach (var file in Files)
             {
-                manifestWriter.WriteLine($"{file.Name};;{CoalescedFile.EscapeName(file.Name)}");
+                manifestWriter.WriteLine($"{CoalescedFile.EscapeName(file.Name)};;{file.Name}");
             }
         }
 
