@@ -38,11 +38,39 @@ namespace LECoal
         }
     }
 
+    internal class CoalescedManifestInfo
+    {
+        public string DestinationFilename { get; } = null;
+        public List<(string, string)> RelativePaths { get; } = new();
+
+        public CoalescedManifestInfo(string manifestPath)
+        {
+            using var manifestReader = new StreamReader(manifestPath);
+            DestinationFilename = manifestReader.ReadLine();
+
+            var countLine = manifestReader.ReadLine().Trim("\r\n ".ToCharArray());
+            for (int i = 0; i < int.Parse(countLine); i++)
+            {
+                var lineChunks = manifestReader.ReadLine().Split(";;", 2, StringSplitOptions.None);
+                if (lineChunks.Length != 2)
+                {
+                    throw new Exception("Expected a manifest line to have 2 chunks");
+                }
+                RelativePaths.Add((lineChunks[0], lineChunks[1]));
+            }
+        }
+    }
+
     [DebuggerDisplay("CoalescedSection \"{Name}\"")]
     public class CoalescedSection
     {
         public string Name { get; private set; }
         public List<(string, string)> Pairs { get; private set; } = new();
+
+        public CoalescedSection(string name)
+        {
+            Name = name;
+        }
 
         public CoalescedSection(BinaryReader reader)
         {
@@ -55,37 +83,43 @@ namespace LECoal
                 var key = reader.ReadCoalescedString();
                 var val = reader.ReadCoalescedString();
 
-                List<string> splitVal = null;
+                List<string> lines = splitValue(val);
 
-                if (val.Contains("\r\n"))
-                {
-                    splitVal = val.Split("\r\n").ToList();
-                }
-                else if (val.Contains('\r') && !val.Contains('\n'))
-                {
-                    splitVal = val.Split('\r').ToList();
-                }
-                else if (!val.Contains('\r') && val.Contains('\n'))
-                {
-                    splitVal = val.Split('\n').ToList();
-                }
-                else if (val.Contains('\r') && val.Contains('\n'))
-                {
-                    throw new Exception("Value contains both CR and LF but not in a CRLF sequence!");
-                }
-
-                if (splitVal is null)
+                if (lines is null)
                 {
                     Pairs.Add((key, val));
+                    continue;
                 }
-                else
+                
+                foreach (var line in lines)
                 {
-                    foreach (var line in splitVal)
-                    {
-                        Pairs.Add(($"{key}||", line));
-                    }
+                    Pairs.Add(($"{key}||", line));
                 }
             }
+        }
+
+        internal List<string> splitValue(string val)
+        {
+            List<string> splitVal = null;
+
+            if (val.Contains("\r\n"))
+            {
+                splitVal = val.Split("\r\n").ToList();
+            }
+            else if (val.Contains('\r') && !val.Contains('\n'))
+            {
+                splitVal = val.Split('\r').ToList();
+            }
+            else if (!val.Contains('\r') && val.Contains('\n'))
+            {
+                splitVal = val.Split('\n').ToList();
+            }
+            else if (val.Contains('\r') && val.Contains('\n'))
+            {
+                throw new Exception("Value contains both CR and LF but not in a CRLF sequence!");
+            }
+
+            return splitVal;
         }
     }
 
@@ -94,6 +128,11 @@ namespace LECoal
     {
         public string Name { get; private set; }
         public List<CoalescedSection> Sections { get; private set; } = new ();
+
+        public CoalescedFile(string name)
+        {
+            Name = name;
+        }
 
         public CoalescedFile(BinaryReader reader)
         {
@@ -147,35 +186,73 @@ namespace LECoal
                 throw new Exception("Didn't find a manifest in path");
             }
 
-            // Read the manifest
-            string destinationName;
-            List <(string,string)> relativePaths = new ();
-            {
-                using var manifestReader = new StreamReader(manifestPath);
-                destinationName = manifestReader.ReadLine();
+            CoalescedManifestInfo manifest = new (manifestPath);
+            CoalescedBundle bundle = new (manifest.DestinationFilename);
+            CoalescedFile currentFile = null;
 
-                var countLine = manifestReader.ReadLine().Trim("\r\n ".ToCharArray());
-                for (int i = 0; i < int.Parse(countLine); i++)
+            foreach (var relativePath in manifest.RelativePaths)
+            {
+                var filePath = Path.Combine(path, relativePath.Item1);
+                StreamReader reader = new (filePath);
+
+                currentFile = new CoalescedFile(relativePath.Item2);
+
+                CoalescedSection currentSection = null;
+                string line = null;
+                while ((line = reader.ReadLine()) is not null)
                 {
-                    var lineChunks = manifestReader.ReadLine().Split(";;", 2, StringSplitOptions.None);
-                    if (lineChunks.Length != 2)
+                    // Empty line
+                    if (string.IsNullOrWhiteSpace(line)) { continue; }
+
+                    // Section header
+                    if (line.StartsWith('[') && line.EndsWith(']'))
                     {
-                        throw new Exception("Expected a manifest line to have 2 chunks");
+                        var header = line.Substring(1, line.Length - 2);
+                        if (header.Length < 1 || string.IsNullOrWhiteSpace(header)) { throw new Exception("Expected to have a header with text"); }
+
+                        if (currentSection is not null)
+                        {
+                            currentFile.Sections.Add(currentSection);
+                        }
+                        currentSection = new CoalescedSection(header);
+
+                        continue;
                     }
-                    relativePaths.Add((lineChunks[0], lineChunks[1]));
+
+                    // Pair
+                    var chunks = line.Split('=', 2);
+                    if (chunks.Length != 2) { throw new Exception("Expected to have exactly two chunks after splitting the line by ="); }
+
+                    if (chunks[0].EndsWith("||"))  // It's a multiline UGH
+                    {
+                        var strippedKey = chunks[0].Substring(0, chunks[0].Length - 2);
+                        
+                        if (currentSection.Pairs.Count > 0 && currentSection.Pairs.Last().Item1 == strippedKey)
+                        {
+                            var last = currentSection.Pairs[currentSection.Pairs.Count() - 1];
+                            currentSection.Pairs[currentSection.Pairs.Count() - 1]
+                                = (last.Item1, last.Item2 + "\r\n" + chunks[1]);
+                        }
+                        else
+                        {
+                            currentSection.Pairs.Add((strippedKey, chunks[1]));
+                        }
+                    }
+                    else
+                    {
+                        currentSection.Pairs.Add((chunks[0], chunks[1]));
+                    }
+
                 }
-            }
 
-            // Construct a bundle
-            CoalescedBundle bundle = new(destinationName);
-
-            foreach (var relativePath in relativePaths)
-            {
-                
+                currentFile.Sections.Add(currentSection);
+                bundle.Files.Add(currentFile);
             }
 
             return bundle;
         }
+
+        
 
         public void UnpackToDirectory(string destinationPath)
         {
@@ -248,7 +325,7 @@ namespace LECoal
             bundle.UnpackToDirectory(extractedDir);
 
             var rebuiltBundle = CoalescedBundle.ReadFromDirectory(_inputBundleName, extractedDir);
-            //bundle.PackToFile(rebuiltPath);
+            rebuiltBundle.UnpackToDirectory(extractedDir + "_re");
         }
     }
 }
