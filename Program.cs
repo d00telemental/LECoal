@@ -319,43 +319,63 @@ namespace LECoal
             switch (args[0].ToUpper())
             {
                 case "UNPACK":
-                    var fromPath = args[1];
-                    var toPath = args[2];
-
-                    if (string.IsNullOrEmpty(fromPath)) { throw new Exception($"Expected the 'from' argument for 'unpack' not to be empty"); }
-                    if (string.IsNullOrEmpty(toPath)) { throw new Exception($"Expected the 'to' argument for 'unpack' not to be empty"); }
-
-                    // Expand '.' into working dir in TO argument.
-                    if (toPath.Trim() == ".")
                     {
-                        toPath = Directory.GetCurrentDirectory();
+                        var fromPath = args[1];
+                        var toPath = args[2];
+
+                        if (string.IsNullOrEmpty(fromPath)) { throw new Exception($"Expected the 'from' argument for 'unpack' not to be empty"); }
+                        if (string.IsNullOrEmpty(toPath)) { throw new Exception($"Expected the 'to' argument for 'unpack' not to be empty"); }
+
+                        // Expand '.' into working dir in TO argument.
+                        if (toPath.Trim() == ".")
+                        {
+                            toPath = Directory.GetCurrentDirectory();
+                        }
+
+                        // Make both pathes absolute.
+                        if (!Path.IsPathRooted(fromPath)) { fromPath = Path.Combine(Directory.GetCurrentDirectory(), fromPath); }
+                        if (!Path.IsPathRooted(toPath)) { toPath = Path.Combine(Directory.GetCurrentDirectory(), toPath); }
+
+                        if (!File.Exists(fromPath) || File.GetAttributes(fromPath).HasFlag(FileAttributes.Directory))
+                        {
+                            throw new Exception($"Expected the 'from' argument for 'unpack' to be an existing file");
+                        }
+
+                        Console.WriteLine($"Unpacking {fromPath}\n  into {toPath}...");
+                        Unpack(fromPath, toPath);
                     }
-
-                    // Make both pathes absolute.
-                    if (!Path.IsPathRooted(fromPath)) { fromPath = Path.Combine(Directory.GetCurrentDirectory(), fromPath); }
-                    if (!Path.IsPathRooted(toPath)) { toPath = Path.Combine(Directory.GetCurrentDirectory(), toPath); }
-
-                    if (!File.Exists(fromPath) || File.GetAttributes(fromPath).HasFlag(FileAttributes.Directory))
-                    {
-                        throw new Exception($"Expected the 'from' argument for 'unpack' to be an existing file");
-                    }
-                    if (File.Exists(toPath) && !File.GetAttributes(toPath).HasFlag(FileAttributes.Directory))
-                    {
-                        throw new Exception($"Expected the 'to' argument for 'unpack' to be a directory");
-                    }
-
-                    Console.WriteLine($"Unpacking {fromPath}\n  into {toPath}...");
-                    Unpack(fromPath, toPath);
-
                     break;
                 case "PACK":
+                    {
+                        var fromPath = args[1];
+                        var toPath = args[2];
+
+                        if (string.IsNullOrEmpty(fromPath)) { throw new Exception($"Expected the 'from' argument for 'pack' not to be empty"); }
+                        if (string.IsNullOrEmpty(toPath)) { throw new Exception($"Expected the 'to' argument for 'pack' not to be empty"); }
+
+                        // Expand '.' into working dir in FROM argument.
+                        if (fromPath.Trim() == ".")
+                        {
+                            fromPath = Directory.GetCurrentDirectory();
+                        }
+
+                        // Make both pathes absolute.
+                        if (!Path.IsPathRooted(fromPath)) { fromPath = Path.Combine(Directory.GetCurrentDirectory(), fromPath); }
+                        if (!Path.IsPathRooted(toPath)) { toPath = Path.Combine(Directory.GetCurrentDirectory(), toPath); }
+
+                        if (!Directory.Exists(fromPath))
+                        {
+                            throw new Exception($"Expected the 'from' argument for 'pack' to be an existing directory");
+                        }
+
+                        Console.WriteLine($"Packing {fromPath}\n  into {toPath}...");
+                        Pack(fromPath, toPath);
+                    }
                     break;
                 default:
                     throw new Exception($"Expected 'pack' or 'unpack' as the first argument, given {args[1]}");
             }
         }
-
-
 
         static void Unpack(string fromFile, string toDir)
         {
@@ -376,26 +396,5 @@ namespace LECoal
         {
             CoalescedTool tool = new (args);
         }
-
-        #region Testing stuff
-        private static string _pathPrefix = @"D:\Temp\_0MELE\Coal\";
-        private static string _inputBundleName = "ME2_Coalesced_INT.bin";
-
-        void Test()
-        {
-            var inputPath = Path.Combine(_pathPrefix, _inputBundleName);
-            var extractedDir = Path.ChangeExtension(Path.Combine(_pathPrefix, _inputBundleName), "").TrimEnd('.');
-            var rebuiltPath = inputPath + ".rebuilt";
-
-            var bundle = CoalescedBundle.ReadFromFile(_inputBundleName, inputPath);
-            bundle.WriteToDirectory(extractedDir);
-
-            var rebuiltBundle = CoalescedBundle.ReadFromDirectory(_inputBundleName, extractedDir);
-            rebuiltBundle.WriteToFile(rebuiltPath);
-
-            var twiceRebuiltBundle = CoalescedBundle.ReadFromFile(_inputBundleName, rebuiltPath);
-            twiceRebuiltBundle.WriteToDirectory(extractedDir + "_re");
-        }
-        #endregion
     }
 }
