@@ -145,7 +145,7 @@ namespace LECoal
 
         public static CoalescedBundle ReadFromDirectory(string name, string path)
         {
-            var manifestPath = Path.Combine(path, Path.ChangeExtension(name, "extracted"));
+            var manifestPath = Path.Combine(path, "mele.extractedbin");
             if (!File.Exists(manifestPath))
             {
                 throw new Exception("Didn't find a manifest in path");
@@ -246,7 +246,7 @@ namespace LECoal
             }
 
             // Write out a manifest to rebuild from.
-            var manifestPath = Path.Combine(destinationPath, Path.ChangeExtension(Name, "extracted"));
+            var manifestPath = Path.Combine(destinationPath, "mele.extractedbin");
             using var manifestWriter = new StreamWriter(manifestPath);
             manifestWriter.WriteLine($"{Name}");
             manifestWriter.WriteLine($"{Files.Count}");
@@ -307,16 +307,82 @@ namespace LECoal
         }
     }
 
+    public class CoalescedTool
+    {
+        public CoalescedTool(string[] args)
+        {
+            if (args.Count() != 3)
+            {
+                throw new Exception($"Expected exactly 3 arguments, given {args.Count()}.");
+            }
+
+            switch (args[0].ToUpper())
+            {
+                case "UNPACK":
+                    var fromPath = args[1];
+                    var toPath = args[2];
+
+                    if (string.IsNullOrEmpty(fromPath)) { throw new Exception($"Expected the 'from' argument for 'unpack' not to be empty"); }
+                    if (string.IsNullOrEmpty(toPath)) { throw new Exception($"Expected the 'to' argument for 'unpack' not to be empty"); }
+
+                    // Expand '.' into working dir in TO argument.
+                    if (toPath.Trim() == ".")
+                    {
+                        toPath = Directory.GetCurrentDirectory();
+                    }
+
+                    // Make both pathes absolute.
+                    if (!Path.IsPathRooted(fromPath)) { fromPath = Path.Combine(Directory.GetCurrentDirectory(), fromPath); }
+                    if (!Path.IsPathRooted(toPath)) { toPath = Path.Combine(Directory.GetCurrentDirectory(), toPath); }
+
+                    if (!File.Exists(fromPath) || File.GetAttributes(fromPath).HasFlag(FileAttributes.Directory))
+                    {
+                        throw new Exception($"Expected the 'from' argument for 'unpack' to be an existing file");
+                    }
+                    if (File.Exists(toPath) && !File.GetAttributes(toPath).HasFlag(FileAttributes.Directory))
+                    {
+                        throw new Exception($"Expected the 'to' argument for 'unpack' to be a directory");
+                    }
+
+                    Console.WriteLine($"Unpacking {fromPath}\n  into {toPath}...");
+                    Unpack(fromPath, toPath);
+
+                    break;
+                case "PACK":
+                    break;
+                default:
+                    throw new Exception($"Expected 'pack' or 'unpack' as the first argument, given {args[1]}");
+            }
+        }
+
+
+
+        static void Unpack(string fromFile, string toDir)
+        {
+            var bundle = CoalescedBundle.ReadFromFile(Path.GetFileName(fromFile), fromFile);
+            bundle.WriteToDirectory(toDir);
+        }
+        static void Pack(string fromDir, string toFile)
+        {
+            var manifest = new CoalescedManifestInfo(Path.Combine(fromDir, "mele.extractedbin"));
+            var bundle = CoalescedBundle.ReadFromDirectory(manifest.DestinationFilename, fromDir);
+            bundle.WriteToFile(toFile);
+        }
+    }
+
     class Program
     {
+        static void Main(string[] args)
+        {
+            CoalescedTool tool = new (args);
+        }
+
+        #region Testing stuff
         private static string _pathPrefix = @"D:\Temp\_0MELE\Coal\";
         private static string _inputBundleName = "ME2_Coalesced_INT.bin";
 
-        static void Main(string[] args)
+        void Test()
         {
-            // .\MELECoal.exe unpack Coalesced_INT.bin .
-            // .\MELECoal.exe pack . Coalesced_INT.bin
-
             var inputPath = Path.Combine(_pathPrefix, _inputBundleName);
             var extractedDir = Path.ChangeExtension(Path.Combine(_pathPrefix, _inputBundleName), "").TrimEnd('.');
             var rebuiltPath = inputPath + ".rebuilt";
@@ -330,5 +396,6 @@ namespace LECoal
             var twiceRebuiltBundle = CoalescedBundle.ReadFromFile(_inputBundleName, rebuiltPath);
             twiceRebuiltBundle.WriteToDirectory(extractedDir + "_re");
         }
+        #endregion
     }
 }
