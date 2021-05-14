@@ -239,7 +239,10 @@ namespace LECoal
 
                 }
 
-                currentFile.Sections.Add(currentSection);
+                if (currentSection is not null)
+                {
+                    currentFile.Sections.Add(currentSection);
+                }
                 bundle.Files.Add(currentFile);
             }
 
@@ -426,8 +429,16 @@ namespace LECoal
 
     class Program
     {
+        public static bool IsDebug = false;
+
         static void Main(string[] args)
         {
+#if DEBUG
+            IsDebug = true;
+#else
+            IsDebug = false;
+#endif
+
             try
             {
                 string[] helpTokens = new[] { "?", "/?", "\\?", "HELP", "-HELP", "--HELP", "--RTFM" };
@@ -460,20 +471,20 @@ namespace LECoal
 
                 CoalescedTool tool = new(args);
             }
-            catch (Exceptions.CBundleException ex)
+            catch (Exceptions.CBundleException ex) when (!IsDebug)
             {
                 ConsoleColor.Red.WriteLine($"Error in bundle reading/writing logic:");
                 ConsoleColor.Red.WriteLine($"{ex.Message}\n");
                 ConsoleColor.Red.WriteLine(string.Join("\n", ex.StackTrace.Split("\n").Select(s => " " + s)));
             }
-            catch (Exceptions.CToolException ex)
+            catch (Exceptions.CToolException ex) when (!IsDebug)
             {
                 ConsoleColor.Red.WriteLine($"Error in command interpretation:");
                 ConsoleColor.Red.WriteLine($"{ex.Message}\n");
                 ConsoleColor.Red.WriteLine(string.Join("\n", ex.StackTrace.Split("\n").Select(s => " " + s)) + "\n");
                 ConsoleColor.Cyan.WriteLine("Run the tool with '?' or '--help' argument for usage reference.\n");
             }
-            catch (Exception ex)
+            catch (Exception ex) when (!IsDebug)
             {
                 ConsoleColor.Red.WriteLine($"Generic exception {ex.GetType().FullName}:\n{ex.Message}\n{ex.StackTrace}\n");
             }
