@@ -7,6 +7,16 @@ using System.Text;
 
 namespace LECoal
 {
+    public static class ConsoleExtensions
+    {
+        public static void WriteLine(this ConsoleColor color, params string[] text)
+        {
+            Console.ForegroundColor = color;
+            Console.WriteLine(string.Join(" ", text));
+            Console.ResetColor();
+        }
+    }
+
     public static class BinaryExtensions
     {
         public static string ReadCoalescedString(this BinaryReader reader)
@@ -18,7 +28,7 @@ namespace LECoal
                 var str = Encoding.Unicode.GetString(bytes, 0, bytes.Length - 2);
                 return str;
             }
-            
+
             return string.Empty;
         }
 
@@ -38,6 +48,19 @@ namespace LECoal
         }
     }
 
+    namespace Exceptions
+    {
+        public class CBundleException : Exception
+        {
+            public CBundleException(string message) : base(message) { }
+        }
+
+        public class CToolException : Exception
+        {
+            public CToolException(string message) : base(message) { }
+        }
+    }
+
     internal class CoalescedManifestInfo
     {
         public string DestinationFilename { get; } = null;
@@ -45,16 +68,22 @@ namespace LECoal
 
         public CoalescedManifestInfo(string manifestPath)
         {
+            if (!File.Exists(manifestPath))
+            {
+                throw new Exceptions.CBundleException($"Failed to find a manifest at {manifestPath}");
+            }
+
             using var manifestReader = new StreamReader(manifestPath);
             DestinationFilename = manifestReader.ReadLine();
 
             var countLine = manifestReader.ReadLine().Trim("\r\n ".ToCharArray());
             for (int i = 0; i < int.Parse(countLine); i++)
             {
-                var lineChunks = manifestReader.ReadLine().Split(";;", 2, StringSplitOptions.None);
+                var lineChunks = manifestReader.ReadLine()?.Split(";;", 2, StringSplitOptions.None)
+                    ?? throw new Exceptions.CBundleException("Expected to read a full line, got null");
                 if (lineChunks.Length != 2)
                 {
-                    throw new Exception("Expected a manifest line to have 2 chunks");
+                    throw new Exceptions.CBundleException("Expected a manifest line to have 2 chunks");
                 }
                 RelativePaths.Add((lineChunks[0], lineChunks[1]));
             }
@@ -268,6 +297,11 @@ namespace LECoal
 
                 foreach (var section in file.Sections)
                 {
+                    if (section is null)
+                    {
+                        continue;
+                    }
+
                     writer.WriteCoalescedString(section.Name);
                     writer.Write((Int32)section.Pairs.Count);
 
@@ -313,7 +347,7 @@ namespace LECoal
         {
             if (args.Count() != 3)
             {
-                throw new Exception($"Expected exactly 3 arguments, given {args.Count()}.");
+                throw new Exceptions.CToolException($"Expected exactly 3 arguments, given {args.Count()}.");
             }
 
             switch (args[0].ToUpper())
@@ -323,8 +357,8 @@ namespace LECoal
                         var fromPath = args[1];
                         var toPath = args[2];
 
-                        if (string.IsNullOrEmpty(fromPath)) { throw new Exception($"Expected the 'from' argument for 'unpack' not to be empty"); }
-                        if (string.IsNullOrEmpty(toPath)) { throw new Exception($"Expected the 'to' argument for 'unpack' not to be empty"); }
+                        if (string.IsNullOrEmpty(fromPath)) { throw new Exceptions.CToolException($"Expected the 'from' argument for 'unpack' not to be empty"); }
+                        if (string.IsNullOrEmpty(toPath)) { throw new Exceptions.CToolException($"Expected the 'to' argument for 'unpack' not to be empty"); }
 
                         // Expand '.' into working dir in TO argument.
                         if (toPath.Trim() == ".")
@@ -338,7 +372,7 @@ namespace LECoal
 
                         if (!File.Exists(fromPath) || File.GetAttributes(fromPath).HasFlag(FileAttributes.Directory))
                         {
-                            throw new Exception($"Expected the 'from' argument for 'unpack' to be an existing file");
+                            throw new Exceptions.CToolException($"Expected the 'from' argument for 'unpack' to be an existing file");
                         }
 
                         Console.WriteLine($"Unpacking {fromPath}\n  into {toPath}...");
@@ -350,8 +384,8 @@ namespace LECoal
                         var fromPath = args[1];
                         var toPath = args[2];
 
-                        if (string.IsNullOrEmpty(fromPath)) { throw new Exception($"Expected the 'from' argument for 'pack' not to be empty"); }
-                        if (string.IsNullOrEmpty(toPath)) { throw new Exception($"Expected the 'to' argument for 'pack' not to be empty"); }
+                        if (string.IsNullOrEmpty(fromPath)) { throw new Exceptions.CToolException($"Expected the 'from' argument for 'pack' not to be empty"); }
+                        if (string.IsNullOrEmpty(toPath)) { throw new Exceptions.CToolException($"Expected the 'to' argument for 'pack' not to be empty"); }
 
                         // Expand '.' into working dir in FROM argument.
                         if (fromPath.Trim() == ".")
@@ -365,7 +399,7 @@ namespace LECoal
 
                         if (!Directory.Exists(fromPath))
                         {
-                            throw new Exception($"Expected the 'from' argument for 'pack' to be an existing directory");
+                            throw new Exceptions.CToolException($"Expected the 'from' argument for 'pack' to be an existing directory");
                         }
 
                         Console.WriteLine($"Packing {fromPath}\n  into {toPath}...");
@@ -373,7 +407,7 @@ namespace LECoal
                     }
                     break;
                 default:
-                    throw new Exception($"Expected 'pack' or 'unpack' as the first argument, given {args[1]}");
+                    throw new Exceptions.CToolException($"Expected 'pack' or 'unpack' as the first argument, given {args[1]}");
             }
         }
 
@@ -394,7 +428,55 @@ namespace LECoal
     {
         static void Main(string[] args)
         {
-            CoalescedTool tool = new (args);
+            try
+            {
+                string[] helpTokens = new[] { "?", "/?", "\\?", "HELP", "-HELP", "--HELP", "--RTFM" };
+                if (args.Count() > 0 && helpTokens.Contains(args[0].ToUpper()))
+                {
+                    Console.WriteLine("This tool is capable of packing and unpacking Coalesced_*.bin files for LE1/2.");
+                    Console.WriteLine();
+                    Console.WriteLine("Usage patterns:");
+                    Console.WriteLine("   .\\LECoal.exe unpack <coalesced file> <target directory>");
+                    Console.WriteLine("         - Will unpack the file at <coalesced file> into a directory at <target directory>.");
+                    Console.WriteLine("         - <coalesced file> must exist and be a file, <target directory> will be created if missing.");
+                    Console.WriteLine("   .\\LECoal.exe pack <unpacked directory> <target file>");
+                    Console.WriteLine("         - Will pack the directory at <unpacked directory> into a coalesced file at <target file>.");
+                    Console.WriteLine("         - <unpacked directory> must exist, <target file> will be created or overwritten.");
+                    Console.WriteLine();
+                    Console.WriteLine("Examples:");
+                    Console.WriteLine("   .\\LECoal.exe unpack Coalesced_INT.bin D:\\MELE\\ME1_Coalesced");
+                    Console.WriteLine("         - Will unpack the 'Coalesced_INT.bin' file in the directory you are running the tool from");
+                    Console.WriteLine("           into a bunch of files at D:\\MELE\\ME1_Coalesced.");
+                    Console.WriteLine("         - Those files can then be edited using Notepad++ / Sublime Text / VS Code / etc.");
+                    Console.WriteLine("         - Do not modify 'mele.extractedbin', as it will be needed for packing the files back.");
+                    Console.WriteLine("   .\\LECoal.exe pack D:\\MELE\\ME1_Coalesced Coalesced_INT.bin");
+                    Console.WriteLine("         - Will pack a bunch of files from D:\\MELE\\ME1_Coalesced into a Coalesced_INT.bin file");
+                    Console.WriteLine("           which will be located in the directory you are running the tool from.");
+                    Console.WriteLine("         - If the tool fails to find the auto-genereated 'mele.extractedbin' in unpacked directory,");
+                    Console.WriteLine("           the packing will fail.");
+                    Console.WriteLine();
+                    return;
+                }
+
+                CoalescedTool tool = new(args);
+            }
+            catch (Exceptions.CBundleException ex)
+            {
+                ConsoleColor.Red.WriteLine($"Error in bundle reading/writing logic:");
+                ConsoleColor.Red.WriteLine($"{ex.Message}\n");
+                ConsoleColor.Red.WriteLine(string.Join("\n", ex.StackTrace.Split("\n").Select(s => " " + s)));
+            }
+            catch (Exceptions.CToolException ex)
+            {
+                ConsoleColor.Red.WriteLine($"Error in command interpretation:");
+                ConsoleColor.Red.WriteLine($"{ex.Message}\n");
+                ConsoleColor.Red.WriteLine(string.Join("\n", ex.StackTrace.Split("\n").Select(s => " " + s)) + "\n");
+                ConsoleColor.Cyan.WriteLine("Run the tool with '?' or '--help' argument for usage reference.\n");
+            }
+            catch (Exception ex)
+            {
+                ConsoleColor.Red.WriteLine($"Generic exception {ex.GetType().FullName}:\n{ex.Message}\n{ex.StackTrace}\n");
+            }
         }
     }
 }
