@@ -79,7 +79,7 @@ namespace LECoal
             var countLine = manifestReader.ReadLine().Trim("\r\n ".ToCharArray());
             for (int i = 0; i < int.Parse(countLine); i++)
             {
-                var lineChunks = manifestReader.ReadLine()?.Split(";;", 2, StringSplitOptions.None)
+                var lineChunks = manifestReader.ReadLine()?.Split(";;", 2, StringSplitOptions.RemoveEmptyEntries)
                     ?? throw new Exceptions.CBundleException("Expected to read a full line, got null");
                 if (lineChunks.Length != 2)
                 {
@@ -187,6 +187,7 @@ namespace LECoal
             foreach (var relativePath in manifest.RelativePaths)
             {
                 var filePath = Path.Combine(path, relativePath.Item1);
+                if (!File.Exists(filePath)) { throw new Exceptions.CBundleException("Failed to find a file according to manifest, either the file was removed or the manifest was changed"); }
                 StreamReader reader = new (filePath);
 
                 currentFile = new CoalescedFile(relativePath.Item2);
@@ -202,7 +203,7 @@ namespace LECoal
                     if (line.StartsWith('[') && line.EndsWith(']'))
                     {
                         var header = line.Substring(1, line.Length - 2);
-                        if (header.Length < 1 || string.IsNullOrWhiteSpace(header)) { throw new Exception("Expected to have a header with text"); }
+                        if (header.Length < 1 || string.IsNullOrWhiteSpace(header)) { throw new Exceptions.CBundleException("Expected to have a header with text"); }
 
                         if (currentSection is not null)
                         {
@@ -215,7 +216,7 @@ namespace LECoal
 
                     // Pair
                     var chunks = line.Split('=', 2);
-                    if (chunks.Length != 2) { throw new Exception("Expected to have exactly two chunks after splitting the line by ="); }
+                    if (chunks.Length != 2) { throw new Exceptions.CBundleException("Expected to have exactly two chunks after splitting the line by ="); }
 
                     if (chunks[0].EndsWith("||"))  // It's a multiline value UGH
                     {
