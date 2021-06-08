@@ -256,7 +256,7 @@ namespace LECoal
 
             foreach (var file in Files)
             {
-                var outPath = Path.Combine(destinationPath, CoalescedFile.EscapeName(file.Name));
+                var outPath = Path.Combine(destinationPath, Path.GetFileName(file.Name));
                 using var writerStream = new StreamWriter(outPath);
                 foreach (var section in file.Sections)
                 {
@@ -285,7 +285,7 @@ namespace LECoal
             manifestWriter.WriteLine($"{Files.Count}");
             foreach (var file in Files)
             {
-                manifestWriter.WriteLine($"{CoalescedFile.EscapeName(file.Name)};;{file.Name}");
+                manifestWriter.WriteLine($"{Path.GetFileName(file.Name)};;{file.Name}");
             }
         }
 
