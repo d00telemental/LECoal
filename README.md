@@ -1,10 +1,5 @@
 ﻿# LE1/2 Coalesced Tool
 
-Tool for packing and unpacking LE1/LE2 Coalesced_INT.bin files.
+**The tool is deprecated.**
 
-Usage:
-
-```
-.\LECoal.exe unpack (coalesced file) (target directory)
-.\LECoal.exe pack (unpacked directory) (target file)
-```
+Use [ME3Tweaks Mod Manager](https://github.com/ME3Tweaks/ME3TweaksModManager) to pack/unpack LE1 and LE2 Coalesced files instead!
