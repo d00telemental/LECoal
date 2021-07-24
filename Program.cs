@@ -199,6 +199,9 @@ namespace LECoal
                     // Empty line
                     if (string.IsNullOrWhiteSpace(line)) { continue; }
 
+                    // Comment
+                    if (line.StartsWith(";") || line.StartsWith("#")) { continue; }
+
                     // Section header
                     if (line.StartsWith('[') && line.EndsWith(']'))
                     {
